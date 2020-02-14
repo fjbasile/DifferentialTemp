@@ -1,12 +1,34 @@
 #include <Wire.h>
 #include <math.h>
 
-int sensorPin = A0;
+//**************************************************************************************************
+//THESE ARE YOUR PUMP TEMPERATURE SETTINGS. PUMP CURRENTLY COMES ON AT 220 AND STAYS ON UNTIL 190 **
+//                                                                                                **
+//THE OVERHEAT TEMP WILL MOST LIKELY NEVER CHANGE BUT I PUT IT THERE FOR EASY REFERENCE           **
+//**************************************************************************************************
+int pumpCutoffTemp = 190; //threshold temperature to cut pump back off
+int pumpTurnOnTemp = 220; //threshold temperature to turn pump on
+int overheatTemp = 305; //special case in which temp exceeds abilities of calculations
+
+int sensorPin = A0; //analog input is A0
 int sensorValue = 0;
 float voltage;
-float V1 = 5.0;
-float clusterRes = 2073.0;
-int highFlag = 0;
+float V1 = 5.0; //rail voltage
+float clusterRes = 2073.0; //cluster resistance
+float temp;
+String tempWord;
+
+const byte zero = 0x3F;
+const byte one = 0x30;
+const byte two = 0x6D;
+const byte three = 0x79;
+const byte four = 0x72;
+const byte five = 0x5B;
+const byte six = 0x5E;
+const byte seven = 0x31;
+const byte eight = 0x7F;
+const byte nine = 0x73;
+const byte F = 0x47;
 
 //address of the 7 segment led display
 const byte s7sAddress = 0x71;
@@ -23,18 +45,24 @@ void setup()
   setBrightnessI2C(255);
   delay(1000);
 
-   //clear the display one final time and set the cursor to the left
+  //clear the display one final time and set the cursor to the left
   clearDisplayI2C();
-  setDecimalsI2C(0b000100);
+  //turn off decimal point
+  setDecimalsI2C(0b000000);
+  //pin 3 is digital output
   pinMode(3, OUTPUT);
+
+  //bootup lights - can delete or comment out after implementation
   pinMode(LED_BUILTIN, OUTPUT);
   for (int i = 0; i < 20; i++)
   {
     digitalWrite(LED_BUILTIN, HIGH);
-    delay(150);
+    delay(50);
     digitalWrite(LED_BUILTIN,LOW);
-    delay(150);
+    delay(50);
   }
+
+  //begin serial communications
   Serial.begin(9600);
 }
 
@@ -42,37 +70,33 @@ void loop()
 {
   delay(250);
   digitalWrite(3, LOW);
-  sensorValue = analogRead(sensorPin); //Read A0
-  voltage = sensorValue * (5.0 / 1023.0); //Correlate sensor value to voltage
-  float temp = getTemp(getSensorResistance(voltage)); //calls getTemp function by getting sensor resistance based on voltage
-  Serial.print(temp);
-  Serial.print("    " + String(highFlag));
+  temp = getMeasurements();
+  buildDisplayOutput(int(temp));
+  //s7sSendStringI2C(buildTempWord(temp)) //uncomment for normal display
+
+  Serial.print(String(temp) + "F");
   Serial.println();
-  
-  s7sSendStringI2C(String(int(temp)));
   delay(20);
 
-  if (temp >= 220.0)
+  if (temp >= pumpTurnOnTemp)
   {
     digitalWrite(3, HIGH);
-    while (temp == 305.0)
+    while (temp == overheatTemp)
   {
-    sensorValue = analogRead(sensorPin); //Read A0
-    voltage = sensorValue * (5.0 / 1023.0); //Correlate sensor value to voltage
-    temp = getTemp(getSensorResistance(voltage));
-    s7sSendStringI2C(String("5hit"));
+    temp = getMeasurements();
+    //s7sSendStringI2C(String("5hit")); //uncomment for normal display
+    buildDisplayOutput(int(temp));
     delay(500);
     s7sSendStringI2C("    ");
     delay(500);
   }
-    while ((temp >= 190.0 && temp <= 220.0) || (temp > 220 && temp != 305.0))
+    while ((temp >= pumpCutoffTemp && temp <= pumpTurnOnTemp ) || (temp > pumpTurnOnTemp && temp != overheatTemp))
     {
-      sensorValue = analogRead(sensorPin); //Read A0
-      voltage = sensorValue * (5.0 / 1023.0); //Correlate sensor value to voltage
-      temp = getTemp(getSensorResistance(voltage)); //calls getTemp function by getting sensor resistance based on voltage
-      Serial.print(String(int(temp)) + "    " + String(highFlag));
+      temp = getMeasurements();
+      buildDisplayOutput(int(temp));
+      //s7sSendStringI2C(buildTempWord(temp)); //uncomment for normal display
+      Serial.print(String(temp) + "F");
       Serial.println();
-      s7sSendStringI2C(String(int(temp)));
       delay(20);
     }
   }
@@ -86,11 +110,32 @@ void loop()
   //}
 }
 
+
+/*
+ * This function reads an analog value between 0 and 1023 from the temp sensor, and then converts that to a voltage
+ * on a 5 volt scale. It then calls getTemp() by passing the voltage to getSensorResistance() first
+*/
+float getMeasurements()
+{
+  sensorValue = analogRead(sensorPin); //Read A0
+  voltage = sensorValue * (V1 / 1023.0); //Correlate sensor value to voltage
+  return getTemp(getSensorResistance(voltage)); //calls getTemp function by getting sensor resistance based on voltage
+}
+
+/*
+ * This calculates the sensor resistance based on a re-configured voltage divider formula
+ */
 float getSensorResistance(float V2)
 {
   return (clusterRes * V2)/(V1-V2);
 }
 
+/*
+ * Calculates the actual temperature based on the resistance calculated in getSensorResistance(). 
+ * There are 8 individual formulas calculating the temperature based on specific resistances. Since
+ * the sensor is not linear, it had to be done this way in order to account for the entire temperature
+ * band. Temps are in Fahrenheit.
+ */
 float getTemp(float resistance)
 {
   float temp;
@@ -100,40 +145,62 @@ float getTemp(float resistance)
   }
   else if (resistance > 48.1 && resistance <= 69.1)
   {
-    temp = ceil((.0131047*pow(resistance,2) -2.81891*resistance + 407.237)*100) / 100;
+    temp = .0131047*pow(resistance,2) -2.81891*resistance + 407.237;
   }
   else if (resistance > 69.1 && resistance <= 134.7)
   {
-    temp = ceil(( -.0000299607*pow(resistance,3)+ .0131945*pow(resistance, 2) -2.40934*resistance + 388.352 ))*100/100;
+    temp = -.0000299607*pow(resistance,3)+ .0131945*pow(resistance, 2) -2.40934*resistance + 388.352;
   }
 
   else if (resistance > 134.7 && resistance <= 287)
   {
-    temp = ceil((-.00000298751*pow(resistance,3)+ .00272654*pow(resistance,2) -1.02937*resistance + 326.463 ))*100/100;
+    temp = -.00000298751*pow(resistance,3) + .00272654*pow(resistance,2) - 1.02937*resistance + 326.463;
   }
 
   else if (resistance > 287 && resistance <= 819)
   {
-    temp = ceil((((-1.5323 * pow(10, -7))*pow(resistance,3)) + .000365177 * pow(resistance, 2) - .353805*resistance + 259.963 ))*100/100;
+    temp = ((-1.5323 * pow(10, -7))*pow(resistance,3)) + .000365177 * pow(resistance, 2) - .353805*resistance + 259.963;
   }
 
   else if (resistance > 819 && resistance <= 2268)
   {
-    temp = ceil((((-6.222 * pow(10, -9))*pow(resistance, 3)) + .00004081*pow(resistance,2) - .109254*resistance + 196.447 ))*100/100;
+    temp = ((-6.222 * pow(10, -9))*pow(resistance, 3)) + .00004081*pow(resistance,2) - .109254*resistance + 196.447;
   }
 
   else if (resistance > 2268 && resistance <= 9516)
   {
-    temp = ceil((((-1.1136 * pow(10, -10) * pow(resistance, 3))) + .00000273966 * pow(resistance, 2) - .0266401*resistance + 133.322 ))*100/100;
+    temp = ((-1.1136 * pow(10, -10) * pow(resistance, 3))) + .00000273966 * pow(resistance, 2) - .0266401*resistance + 133.322;
   }
 
   else if (resistance > 9516 && resistance <= 39064)
   {
-    temp = ceil((((-1.3344 * pow(10, -12) * pow(resistance, 3))) + (1.3488 * pow(10, -7) * pow(resistance, 2)) - .0054169*resistance + 72.3059 ))*100/100;
+    temp = ((-1.3344 * pow(10, -12) * pow(resistance, 3))) + (1.3488 * pow(10, -7) * pow(resistance, 2)) - .0054169*resistance + 72.3059;
   }
   return temp;
 }
 
+
+String buildTempWord(float temp)
+{
+  if (temp >= 100)
+  {
+      return String(int(temp)) + "F";
+  }
+  else if (temp <100 && temp >= 10)
+  {
+    return (" " + String(int(temp)) + "F");    
+  }
+
+  else if (temp < 10 && temp >= 0)
+  {
+    return ("  " + String(int(temp)) + "F");
+  }
+
+  else if (temp < 0 && temp >= -20)
+  {
+    return ("  " + String(int(temp)) + "F");
+  }
+}
 
 // This custom function works somewhat like a serial.print.
 //  You can send it an array of chars (string) and it'll print
@@ -178,5 +245,94 @@ void setDecimalsI2C(byte decimals)
   Wire.beginTransmission(s7sAddress);
   Wire.write(0x77);
   Wire.write(decimals);
-  Wire.endTransmission();
+  Wire.endTransmission(); 
+}
+
+
+void buildDisplayOutput(int temp)
+{
+  const byte digits[4] = {0x7B, 0x7C, 0x7D, 0x7E};
+  const byte nums[11] = {zero, one, two, three, four, five, six, seven, eight, nine, F};
+  const byte tempNums[4];
+    
+  if (temp == 305)
+  {
+    const byte tempNums[4] = {0x4E, 0x10, 0x56, five};
+    Wire.beginTransmission(s7sAddress);
+    for (int i = 0; i < 4; i++)
+    {
+      Wire.write(digits[i]);
+      Wire.write(tempNums[i]);
+    }
+    Wire.endTransmission();
+  }
+  
+  else if (temp >= 100)
+  {
+    int digitOne = temp/100;
+    int digitTwo = temp/10%10;
+    int digitThree = temp%10;
+    const byte tempNums[4] = {F, nums[digitThree], nums[digitTwo],nums[digitOne]}; 
+    Wire.beginTransmission(s7sAddress);
+    for (int i = 0; i < 4; i++)
+    {
+      Wire.write(digits[i]);
+      Wire.write(tempNums[i]);
+    }
+    Wire.endTransmission();
+  }
+
+  else if (temp < 100 && temp >= 10)
+  {
+    int digitOne = temp/10%10;
+    int digitTwo = temp%10;
+    const byte tempNums[4] = {F, nums[digitTwo], nums[digitOne], 0x00};
+    Wire.beginTransmission(s7sAddress);
+    for (int i = 0; i < 4; i++)
+    {
+      Wire.write(digits[i]);
+      Wire.write(tempNums[i]);
+    }
+    Wire.endTransmission();
+  }
+
+  else if (temp < 10 && temp >= 0)
+  {
+    int digitOne = temp%10;
+    const byte tempNums[4] = {F, nums[digitOne], 0x00, 0x00};
+    Wire.beginTransmission(s7sAddress);
+    for (int i = 0; i < 4; i++)
+    {
+      Wire.write(digits[i]);
+      Wire.write(tempNums[i]);
+    }
+    Wire.endTransmission();
+  }
+
+  else if (temp < 0 && temp >= -10)
+  {
+    int digitOne = abs(temp%10);
+    const byte tempNums[4] = {F, nums[digitOne], 0x40, 0x00};
+    Wire.beginTransmission(s7sAddress);
+    for (int i = 0; i < 4; i++)
+    {
+      Wire.write(digits[i]);
+      Wire.write(tempNums[i]);
+    }
+    Wire.endTransmission();      
+  }
+
+  else if (temp <= -10 && temp > -99)
+  {
+    int digitOne = abs(temp/10%10);
+    int digitTwo = abs(temp%10);
+    const byte tempNums[4] = {F, nums[digitTwo], nums[digitOne], 0x40};
+    Wire.beginTransmission(s7sAddress);
+    for (int i = 0; i < 4; i++)
+    {
+      Wire.write(digits[i]);
+      Wire.write(tempNums[i]);
+    }
+    Wire.endTransmission();
+  } 
 }
