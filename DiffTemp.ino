@@ -9,7 +9,7 @@
 int pumpCutoffTemp = 190; //threshold temperature to cut pump back off
 int pumpTurnOnTemp = 220; //threshold temperature to turn pump on
 int overheatTemp = 305; //special case in which temp exceeds abilities of calculations
-
+  
 int sensorPin = A0; //analog input is A0
 int sensorValue = 0;
 float voltage;
@@ -18,6 +18,7 @@ float clusterRes = 2073.0; //cluster resistance
 float temp;
 String tempWord;
 
+//creates mirrored hex digits representative of 7 segment display numbers 
 const byte zero = 0x3F;
 const byte one = 0x30;
 const byte two = 0x6D;
@@ -40,9 +41,12 @@ void setup()
   
   //clear the display and set cursor to the left
   clearDisplayI2C();
+
+  //********************************************************
+  //set display brightness - default is 255 (full high)   **
+  //********************************************************
+  setBrightnessI2C(127);
   
-  //set display brightness - default is 255 (full high)
-  setBrightnessI2C(255);
   delay(1000);
 
   //clear the display one final time and set the cursor to the left
@@ -51,19 +55,6 @@ void setup()
   setDecimalsI2C(0b000000);
   //pin 3 is digital output
   pinMode(3, OUTPUT);
-
-  //bootup lights - can delete or comment out after implementation
-  pinMode(LED_BUILTIN, OUTPUT);
-  for (int i = 0; i < 20; i++)
-  {
-    digitalWrite(LED_BUILTIN, HIGH);
-    delay(50);
-    digitalWrite(LED_BUILTIN,LOW);
-    delay(50);
-  }
-
-  //begin serial communications
-  Serial.begin(9600);
 }
 
 void loop() 
@@ -71,11 +62,8 @@ void loop()
   delay(250);
   digitalWrite(3, LOW);
   temp = getMeasurements();
-  buildDisplayOutput(int(temp));
+  buildDisplayOutput(int(temp)); //comment out for normal display
   //s7sSendStringI2C(buildTempWord(temp)) //uncomment for normal display
-
-  Serial.print(String(temp) + "F");
-  Serial.println();
   delay(20);
 
   if (temp >= pumpTurnOnTemp)
@@ -85,7 +73,7 @@ void loop()
   {
     temp = getMeasurements();
     //s7sSendStringI2C(String("5hit")); //uncomment for normal display
-    buildDisplayOutput(int(temp));
+    buildDisplayOutput(int(temp)); //comment out for normal display
     delay(500);
     s7sSendStringI2C("    ");
     delay(500);
@@ -93,16 +81,13 @@ void loop()
     while ((temp >= pumpCutoffTemp && temp <= pumpTurnOnTemp ) || (temp > pumpTurnOnTemp && temp != overheatTemp))
     {
       temp = getMeasurements();
-      buildDisplayOutput(int(temp));
+      buildDisplayOutput(int(temp)); //comment out for normal display
       //s7sSendStringI2C(buildTempWord(temp)); //uncomment for normal display
-      Serial.print(String(temp) + "F");
-      Serial.println();
       delay(20);
     }
   }
 
-
-  //OR SCENARIO FOR ONE MINUTE
+  //OR SCENARIO FOR ONE MINUTE PUMP RUN
   // if temp>= 220.0
   //{
   //    digitalWrite(3,HIGH); //HIGH OUTPUT
@@ -179,7 +164,9 @@ float getTemp(float resistance)
   return temp;
 }
 
-
+/*
+ * This function build the temperature to be displayed in a NON-MIRRORED fashion
+ */
 String buildTempWord(float temp)
 {
   if (temp >= 100)
@@ -248,7 +235,11 @@ void setDecimalsI2C(byte decimals)
   Wire.endTransmission(); 
 }
 
-
+/*
+ * This function is a custom function that mirrors the seven-segment displays 
+ * output to be a mirror image. This way the display can be viewed in a mirror.
+ * Complicated hex stuff ahead 
+ */
 void buildDisplayOutput(int temp)
 {
   const byte digits[4] = {0x7B, 0x7C, 0x7D, 0x7E};
