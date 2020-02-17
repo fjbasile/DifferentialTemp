@@ -9,6 +9,7 @@
 int pumpCutoffTemp = 190; //threshold temperature to cut pump back off
 int pumpTurnOnTemp = 220; //threshold temperature to turn pump on
 int overheatTemp = 305; //special case in which temp exceeds abilities of calculations
+int pumpTurnOnTime; //initial variable for determining whether pump should bump on
   
 int sensorPin = A0; //analog input is A0
 int sensorValue = 0;
@@ -17,6 +18,8 @@ float V1 = 5.0; //rail voltage
 float clusterRes = 2073.0; //cluster resistance
 float temp;
 String tempWord;
+unsigned long sysTime;
+unsigned long tempTime;
 
 //creates mirrored hex digits representative of 7 segment display numbers 
 const byte zero = 0x3F;
@@ -55,12 +58,32 @@ void setup()
   setDecimalsI2C(0b000000);
   //pin 3 is digital output
   pinMode(3, OUTPUT);
+  sysTime = millis();  
+
+  //determines whether pump should run for 10 seconds based on initial turn on temps
+  if (getMeasurements() <= 60)
+  {
+    pumpTurnOnTime = 0;
+  }
+  else
+  {
+    pumpTurnOnTime = 10000;
+  }
 }
 
 void loop() 
 {
-  delay(250);
-  digitalWrite(3, LOW);
+  tempTime = millis();
+  if (tempTime - sysTime >= pumpTurnOnTime)
+  {
+    digitalWrite(3, HIGH);
+  }
+
+  else
+  {
+    digitalWrite(3,LOW);
+  }
+  
   temp = getMeasurements();
   buildDisplayOutput(int(temp)); //comment out for normal display
   //s7sSendStringI2C(buildTempWord(temp)) //uncomment for normal display
@@ -68,7 +91,7 @@ void loop()
 
   if (temp >= pumpTurnOnTemp)
   {
-    digitalWrite(3, HIGH);
+    digitalWrite(3, LOW);
     while (temp == overheatTemp)
   {
     temp = getMeasurements();
