@@ -60,7 +60,7 @@ void setup()
   pinMode(3, OUTPUT);
   sysTime = millis();  
 
-  //determines whether pump should run for 10 seconds based on initial turn on temps
+  //determines whether pump should run for 10000 ms (10 seconds) based on initial temps
   if (getMeasurements() <= 60)
   {
     pumpTurnOnTime = 0;
@@ -74,6 +74,8 @@ void setup()
 void loop() 
 {
   tempTime = millis();
+
+  //this is basically a time delay for the pump turn on/off 
   if (tempTime - sysTime >= pumpTurnOnTime)
   {
     digitalWrite(3, HIGH);
@@ -85,6 +87,7 @@ void loop()
   }
   
   temp = getMeasurements();
+  delay(500); //ARBITRARY DELAY FOR FLICKERING*********************
   buildDisplayOutput(int(temp)); //comment out for normal display
   //s7sSendStringI2C(buildTempWord(temp)) //uncomment for normal display
   delay(20);
@@ -106,7 +109,7 @@ void loop()
       temp = getMeasurements();
       buildDisplayOutput(int(temp)); //comment out for normal display
       //s7sSendStringI2C(buildTempWord(temp)); //uncomment for normal display
-      delay(20);
+      delay(500); //ARBITRARY DELAY FOR FLICKERING****************
     }
   }
 
@@ -188,7 +191,7 @@ float getTemp(float resistance)
 }
 
 /*
- * This function build the temperature to be displayed in a NON-MIRRORED fashion
+ * This function builds the temperature to be displayed in a NON-MIRRORED fashion
  */
 String buildTempWord(float temp)
 {
@@ -271,7 +274,7 @@ void buildDisplayOutput(int temp)
     
   if (temp == 305)
   {
-    const byte tempNums[4] = {0x4E, 0x10, 0x56, five};
+    const byte tempNums[4] = {0x4E, 0x10, 0x56, five}; //spells 'shit' mirrored
     Wire.beginTransmission(s7sAddress);
     for (int i = 0; i < 4; i++)
     {
