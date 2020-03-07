@@ -69,6 +69,8 @@ void setup()
   {
     pumpTurnOnTime = 10000;
   }
+
+  //pumpTurnOnTime = 0; //uncomment this and comment out above if-else statement to get rid of initial "turn on"
 }
 
 void loop() 
