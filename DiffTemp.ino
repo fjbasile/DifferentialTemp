@@ -10,7 +10,20 @@ int pumpCutoffTemp = 190; //threshold temperature to cut pump back off
 int pumpTurnOnTemp = 220; //threshold temperature to turn pump on
 int overheatTemp = 305; //special case in which temp exceeds abilities of calculations
 int pumpTurnOnTime; //initial variable for determining whether pump should bump on
-  
+
+//**************************************************************************************************
+//                             THESE ARE THE BLINK ON/OFF TIMES                                   **
+//                                 AND OUTPUT PIN SETTINGS                                        **
+//**************************************************************************************************
+int ledPin = 4; //LED pin for LED output
+int blinkOnTime = 500;
+int blinkOffTime = 5000;
+bool ledFlag = false;
+bool pumpBumpDone = false;
+unsigned long previousTime = 0;
+unsigned long currentTime;
+
+int pumpPin = 3;
 int sensorPin = A0; //analog input is A0
 int sensorValue = 0;
 float voltage;
@@ -20,6 +33,8 @@ float temp;
 String tempWord;
 unsigned long sysTime;
 unsigned long tempTime;
+unsigned long blinkTime;
+
 
 //creates mirrored hex digits representative of 7 segment display numbers 
 const byte zero = 0x3F;
@@ -57,7 +72,8 @@ void setup()
   //turn off decimal point
   setDecimalsI2C(0b000000);
   //pin 3 is digital output
-  pinMode(3, OUTPUT);
+  pinMode(pumpPin, OUTPUT);
+  pinMode(ledPin, OUTPUT);
   sysTime = millis();  
 
   //determines whether pump should run for 10000 ms (10 seconds) based on initial temps
@@ -75,46 +91,77 @@ void setup()
 
 void loop() 
 {
+  
   tempTime = millis();
 
   //this is basically a time delay for the pump turn on/off 
   if (tempTime - sysTime >= pumpTurnOnTime)
   {
-    digitalWrite(3, HIGH);
+    pumpBumpDone = true;
+    digitalWrite(ledPin, LOW);
+    digitalWrite(pumpPin, HIGH); //pump turns off with high output
   }
 
-  else
+  else if (tempTime - sysTime < pumpTurnOnTime)
   {
-    digitalWrite(3,LOW);
+    digitalWrite(ledPin, HIGH); //turns or keeps the LED on to indicate pump running
+    digitalWrite(pumpPin,LOW); //pump turns on with low output
   }
-  
-  temp = getMeasurements();
+
   delay(500); //ARBITRARY DELAY FOR FLICKERING*********************
+  
+
+  //MOST COMPLICATED BLINKING OF AN LED KNOWN TO MAN************************************************************
+  currentTime = millis(); //get the current time
+
+  //if we are not in the initial pump bump AND if the led is off AND exceeded the maximum blink off time 
+  if(pumpBumpDone == true && ledFlag == false && (currentTime - previousTime > blinkOffTime))
+  {    
+    previousTime = currentTime; // save the last system time of when the LED was off
+    digitalWrite(ledPin, HIGH); //turn the LED on
+    ledFlag == true; //change the led state boolean to true
+  }
+
+  //if we are not in the initial pump bump AND if the led is on AND exceeded the maximum blink on time 
+  else if (pumpBumpDone == true && ledFlag == true && (currentTime - previousTime > blinkOnTime))
+  {
+    previousTime = currentTime; //save the last system time of when the LED was on
+    digitalWrite(ledPin, LOW); //turn the LED off
+    ledFlag == false; //change the led state boolean to false
+  }
+  //************************************************************************************************************
+  
+  
   buildDisplayOutput(int(temp)); //comment out for normal display
   //s7sSendStringI2C(buildTempWord(temp)) //uncomment for normal display
-  delay(20);
 
   if (temp >= pumpTurnOnTemp)
   {
-    digitalWrite(3, LOW);
+    digitalWrite(ledPin, HIGH); //turns the LED on to indicate pump is running
+    digitalWrite(pumpPin, LOW); //turns the pump on
+    ledFlag = true;
     while (temp == overheatTemp)
-  {
-    temp = getMeasurements();
-    //s7sSendStringI2C(String("5hit")); //uncomment for normal display
-    buildDisplayOutput(int(temp)); //comment out for normal display
-    delay(500);
-    s7sSendStringI2C("    ");
-    delay(500);
-  }
+    {
+        digitalWrite(ledPin, HIGH); //ensures LED stays on
+        ledFlag = true;
+        temp = getMeasurements();
+        //s7sSendStringI2C(String("5hit")); //uncomment for normal display
+        buildDisplayOutput(int(temp)); //comment out for normal display
+        delay(500);
+        s7sSendStringI2C("    ");
+        delay(500);
+    }
     while ((temp >= pumpCutoffTemp && temp <= pumpTurnOnTemp ) || (temp > pumpTurnOnTemp && temp != overheatTemp))
     {
+      digitalWrite(ledPin, HIGH); //ensures LED stays on
+      ledFlag = true;
       temp = getMeasurements();
       buildDisplayOutput(int(temp)); //comment out for normal display
       //s7sSendStringI2C(buildTempWord(temp)); //uncomment for normal display
       delay(500); //ARBITRARY DELAY FOR FLICKERING****************
     }
   }
-
+  
   //OR SCENARIO FOR ONE MINUTE PUMP RUN
   // if temp>= 220.0
   //{
@@ -122,6 +169,7 @@ void loop()
   //    delay(60000); //Delay 1 Minute
   //}
 }
+
 
 
 /*
@@ -272,7 +320,7 @@ void buildDisplayOutput(int temp)
 {
   const byte digits[4] = {0x7B, 0x7C, 0x7D, 0x7E};
   const byte nums[11] = {zero, one, two, three, four, five, six, seven, eight, nine, F};
-  const byte tempNums[4];
+  const byte tempNums[4] {0x00, 0x00, 0x00, 0x00};
     
   if (temp == 305)
   {
