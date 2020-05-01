@@ -90,19 +90,18 @@ void setup()
 }
 
 void loop() 
-{
-  
+{ 
   tempTime = millis();
 
   //this is basically a time delay for the pump turn on/off 
-  if (tempTime - sysTime >= pumpTurnOnTime)
+  if (tempTime - sysTime >= pumpTurnOnTime && pumpBumpDone == false)
   {
     pumpBumpDone = true;
     digitalWrite(ledPin, LOW);
     digitalWrite(pumpPin, HIGH); //pump turns off with high output
   }
 
-  else if (tempTime - sysTime < pumpTurnOnTime)
+  else if (tempTime - sysTime < pumpTurnOnTime && pumpBumpDone == false)
   {
     digitalWrite(ledPin, HIGH); //turns or keeps the LED on to indicate pump running
     digitalWrite(pumpPin,LOW); //pump turns on with low output
