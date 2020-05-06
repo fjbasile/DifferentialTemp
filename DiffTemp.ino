@@ -15,13 +15,13 @@ int pumpTurnOnTime; //initial variable for determining whether pump should bump 
 //                             THESE ARE THE BLINK ON/OFF TIMES                                   **
 //                                 AND OUTPUT PIN SETTINGS                                        **
 //**************************************************************************************************
-int ledPin = 4; //LED pin for LED output
+int ledPin = 13; //LED pin for LED output
 int blinkOnTime = 500;
 int blinkOffTime = 5000;
 bool ledFlag = false;
 bool pumpBumpDone = false;
-unsigned long previousTime = 0;
-unsigned long currentTime;
+unsigned long previousTime = millis();
+unsigned long currentTime = millis();
 
 int pumpPin = 3;
 int sensorPin = A0; //analog input is A0
@@ -98,12 +98,14 @@ void loop()
   {
     pumpBumpDone = true;
     digitalWrite(ledPin, LOW);
+    ledFlag = false;
     digitalWrite(pumpPin, HIGH); //pump turns off with high output
   }
 
   else if (tempTime - sysTime < pumpTurnOnTime && pumpBumpDone == false)
   {
     digitalWrite(ledPin, HIGH); //turns or keeps the LED on to indicate pump running
+    ledFlag = true;
     digitalWrite(pumpPin,LOW); //pump turns on with low output
   }
 
@@ -116,9 +118,9 @@ void loop()
   //if we are not in the initial pump bump AND if the led is off AND exceeded the maximum blink off time 
   if(pumpBumpDone == true && ledFlag == false && (currentTime - previousTime > blinkOffTime))
   {    
-    previousTime = currentTime; // save the last system time of when the LED was off
+    previousTime = millis(); // save the last system time of when the LED was off
     digitalWrite(ledPin, HIGH); //turn the LED on
-    ledFlag == true; //change the led state boolean to true
+    ledFlag = true; //change the led state boolean to true
   }
 
   //if we are not in the initial pump bump AND if the led is on AND exceeded the maximum blink on time 
@@ -126,7 +128,7 @@ void loop()
   {
     previousTime = currentTime; //save the last system time of when the LED was on
     digitalWrite(ledPin, LOW); //turn the LED off
-    ledFlag == false; //change the led state boolean to false
+    ledFlag = false; //change the led state boolean to false
   }
   //************************************************************************************************************
   
@@ -179,7 +181,7 @@ float getMeasurements()
 {
   sensorValue = analogRead(sensorPin); //Read A0
   voltage = sensorValue * (V1 / 1023.0); //Correlate sensor value to voltage
-  return getTemp(getSensorResistance(voltage)); //calls getTemp function by getting sensor resistance based on voltage
+  return getTemp(getSensorResistance(voltage)); //calls getTemp function by getting sensor resistance based on voltageget
 }
 
 /*
@@ -319,7 +321,7 @@ void buildDisplayOutput(int temp)
 {
   const byte digits[4] = {0x7B, 0x7C, 0x7D, 0x7E};
   const byte nums[11] = {zero, one, two, three, four, five, six, seven, eight, nine, F};
-  const byte tempNums[4] {0x00, 0x00, 0x00, 0x00};
+  const byte tempNums[4] = {};
     
   if (temp == 305)
   {
