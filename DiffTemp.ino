@@ -134,7 +134,7 @@ void loop()
   
   temp = getMeasurements();
   buildDisplayOutput(int(temp)); //comment out for normal display
-  //s7sSendStringI2C(buildTempWord(temp)) //uncomment for normal display
+  //s7sSendStringI2C(buildTempWord(temp)); //uncomment for normal display
 
   if (temp >= pumpTurnOnTemp)
   {
