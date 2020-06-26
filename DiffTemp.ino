@@ -161,14 +161,10 @@ void loop()
       //s7sSendStringI2C(buildTempWord(temp)); //uncomment for normal display
       delay(500); //ARBITRARY DELAY FOR FLICKERING****************
     }
+    digitalWrite(ledPin, LOW); //turns the LED off to indicate pump is off
+    digitalWrite(pumpPin, HIGH); //turns the pump off
+    ledFlag = false;
   }
-  
-  //OR SCENARIO FOR ONE MINUTE PUMP RUN
-  // if temp>= 220.0
-  //{
-  //    digitalWrite(3,HIGH); //HIGH OUTPUT
-  //    delay(60000); //Delay 1 Minute
-  //}
 }
 
 
